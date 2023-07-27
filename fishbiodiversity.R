@@ -30,10 +30,13 @@ A_fish_lake<-fsh_perFish_noDups %>% filter(passNumber %in% c(1,4,5))
 
 fsh_bulk_lake<-fsh_bulkCount_noDups %>% filter(passNumber %in% c(1,4,5))
 
-B_fish_lake<-A_fish_lake%>% group_by(siteID,scientificName,year,site_year_bout,site_bout,gear)%>%
+B_fish_lake<-A_fish_lake%>% group_by(siteID,scientificName,year,site_year_bout,site_bout,gear,eventID)%>%
   count("scientificName")
 
-C_bulk_lake<-fsh_bulk_lake %>% select(c("siteID","scientificName","eventID","year","site_year_bout","site_bout","gear","bulkFishCount")) %>% count("scientificName")
+AC_bulk_lake<-fsh_bulk_lake %>% group_by("siteID","scientificName","eventID","year","site_year_bout","site_bout","gear","bulkFishCount") %>% summarise(n=sum(bulkFishCount))
+
+AC_bulk_lake<-fsh_bulk_lake %>% group_by(siteID,scientificName,eventID,year,site_year_bout,site_bout,gear,bulkFishCount) %>% 
+  summarise(n=sum(bulkFishCount))
 
 C_bulk_lake$n<-C_bulk_lake$bulkFishCount
 
@@ -44,12 +47,16 @@ bulk_join$count<-bulk_join$bulkFishCount
 class(fish_speciescount$count)
 class(bulk_join$count)
 
-lake_total_fish<-rbind(B_fish_lake,C_bulk_lake)
+#lake 
+lake_total_fish<-rbind(B_fish_lake,AC_bulk_lake)
 
 ef_total<-subset(lake_total_fish,lake_total_fish$gear=="e-fisher")
 ef_lake_total<-ef_total%>% filter(str_detect(siteID,"TOOK|CRAM|LIRO|PRPO|PRLA"))
 
+ef_lake_fish<-ef_lake_total %>% group_by(scientificName,site_year_bout) %>%
+  summarise(tot_fish=sum(n))
 
+fsh_perPass_noDups
 
 fyke_lake_total<-subset(lake_total_fish,lake_total_fish$gear=="fyke")
 
@@ -57,12 +64,23 @@ fyke_lake_total<-subset(lake_total_fish,lake_total_fish$gear=="fyke")
 #lake pass
 lake_fish_pass_onepass<-subset(fsh_perPass_noDups,fsh_perPass_noDups$passNumber==1)
 
-lake_pass_ef <- lake_fish_pass_onepass %>% group_by(site_year_bout,siteID,year,eventID,passNumber) %>%
+lake_pass_ef <- lake_fish_pass_onepass %>% group_by(site_year_bout) %>%
   summarise(totalseconds=sum(efTime))
 
-lake_ef_cpu<-merge(ef_lake_total,lake_pass_ef)
+class(lake_pass_ef$totalseconds)
+
+lake_pass_ef$gear<-substr(lake_pass_ef$eventID,20,30)
+only_lake_pass_ef<-lake_pass_ef%>% filter(str_detect(siteID,"TOOK|CRAM|LIRO|PRPO|PRLA"))
+only_lake_pass_only_ef<-subset(only_lake_pass_ef,only_lake_pass_ef$gear=="e-fisher")
+
+lake_ef_cpu<-rbind(lake_pass_ef,lake_fish_site_total)
+
+lake_fish_site_total<- ef_lake_fish %>%  group_by(site_year_bout, scientificName) %>%
+  summarise(totalF=sum(tot_fish))
 
 ef_lake_ef_cpu<-subset(lake_ef_cpu,lake_ef_cpu$gear=="e-fisher")
+
+count_ef_lake<-group_by()
 
 lake_ef_cpu$cpue<-paste(lake_ef_cpu$n/(lake_ef_cpu$totalseconds/3600))
 as.data.frame()
@@ -92,6 +110,9 @@ class(first_pass_total_fish_perfish_bulk$total_fish_PH)
 A_fish_all_fistpass<- subset(fsh_perFish_noDups,fsh_perFish_noDups$passNumber==1)
 
 B_fish_pone_speciescount<-A_fish_all_fistpass%>% group_by(siteID,scientificName,year,site_year_bout,site_bout,gear)%>%
+  count("scientificName")
+
+cpue_fshpfsh<-A_fish_all_fistpass%>% group_by(siteID,scientificName,year,site_year_bout,site_bout,gear)%>%
   count("scientificName")
 
 ## all pass
@@ -371,11 +392,25 @@ depletion_df<-data_frame(depletion_fixed_no_dup)
           class(Afish_dist$Ameiurus.melas)
           
          #Afish_dist<-fish_beta_form_05152023[-208,]
+          
+          #ordination by ecoregion 
+          
+          library(dplyr)
+          library(vegan)
+          arkan_red_ord<-ordination_arkan_red %>% column_to_rownames("site_year_bout")
+
+
+
+
           set.seed(1200)
-          fish_distance<-avgdist(Bfish_dist,dmethod = "bray", sample = 9 )
+          disarkanred<-avgdist(arkan_red_ord,dmethod = "bray", sample = 20 )
           
           set.seed(1)
-          nmds<-metaMDS(fish_distance)
+          nmds<-metaMDS(arkan_red_ord)
+          
+          nmds$points
+          scores(nmds)
+          plot(nmds)
           
           #set.seed(2)
           #metaMDS(fish_distance)
@@ -384,11 +419,13 @@ depletion_df<-data_frame(depletion_fixed_no_dup)
           library(dplyr)
           library(vegan)
           
-            scores(nmds) %>%
+          arkordgraph<-nmds%>%
             as_tibble(rownames = "site_year_bout") %>%
-            inner_join(.,diversity_env_data,by="site_year_bout") %>%
+            inner_join(.,arkred_ord_env,by="site_year_bout") %>%
             ggplot(aes(x=NMDS1,y=NMDS2,color=nmds)) +
             geom_point()
+            
+            as.data.frame(scores)
           
             #variation parti
             nmds$
@@ -397,25 +434,19 @@ depletion_df<-data_frame(depletion_fixed_no_dup)
           graph_divide(nmds) %>%
             as_tibble(rownames = "site_year_bout")
           
+        arkred  %>%
+            as_tibble(rownames = "site_year_bout")
+        
+        as.data.frame(arkred)
+          
           class(beta_test_interger$)
           
           
           
           #alternative to ordination
           
-          alt_dist <-fish_distance
-          alt_dist %>%
-            as.matrix() %>%
-            as_tibble(rownames = "site_year_bout") %>%
-            inner_join(.,diversity_env_data,by="site_year_bout") %>%
-            ggplot(aes(x=NMDS1,y=NMDS2,color=samplebracket))
-            
-          
-          
-          
-          
-          
-          
+         arkred<-nmds$points
+          nmds
           
           
           
@@ -557,6 +588,43 @@ depletion_df<-data_frame(depletion_fixed_no_dup)
                           
                           
                         library(vegan)
+                          
+#latest data 05252023
+#data streams
+
+stream_beta_cpue<-cpue_streams_fishperfish_bulk_05252023 %>%
+  column_to_rownames("site_year_bout")
+
+library(vegan)
+
+shannondiv <- diversity(stream_beta_cpue)
+head(shannondiv)
+
+shannon_stream_fish<-as.data.frame(shannondiv)
+
+#simpson
+
+simpsondiv<-diversity(stream_beta_cpue,index = "simpson")
+head(simpsondiv)
+
+simpson_stream_fish<-as.data.frame(simpsondiv)
+
+#rich 
+
+richness<-specnumber(stream_beta_cpue)
+stream_richness<-as.data.frame(richness)
+
+# getting site means 
+## richness
+
+richness_justsites_mean<-stream_richnessh_modified_052920223 %>% group_by(Site) %>%
+summarize(mean=mean(Richness))
+
+
+#hill div 
+hilldiv::hill_div(stream_beta_cpue,2,hills_tree)
+
+  
                           
                           
                           
@@ -708,18 +776,29 @@ depletion_df<-data_frame(depletion_fixed_no_dup)
                           
                           #above doesnt work
                           library(ggplot2)
+                        library(dplyr)
+                        library(tidyverse)
                           simp_lat_drain$site_year_bout<-simp_lat_drain$?..site_year_bout
                           
                           p<-ggplot(data=cor_diversity_env_data,aes(shannondiv,simpsondiv))+
                             geom_point(aes(color=factor(drainage)))
                           
+                          NEON_shannon_simp<- NEON_Shannon_and_Simpson_
+                          NEON_shannon_simp$shannon<-NEON_shannon_simp$`shannon score`
+                          NEON_shannon_simp$simpson<-NEON_shannon_simp$`simpson score`
                           
-                         p<- ggplot(data=cor_diversity_env_data,aes(shannondiv,simpsondiv))+
-                            geom_count(aes(color=factor(drainage))) +
-                            coord_fixed() +
-                            theme_bw() +
+                          
+                          
+                          tiff('test.tiff', units="in", width=5, height=4, res=400, compression = 'lzw')
+                          
+                         p<- ggplot(data=NEON_shannon_simp,aes(shannon,simpson))+
+                            geom_count(aes(color=factor(ecoregion)))+
+                            coord_fixed()+
+                            theme_bw()+
                             scale_size_area(breaks = c(1,2))
                          
+                         
+                         getwd()
                          
                          p<- ggplot(data=cor_diversity_env_data,aes(shannondiv,simpsondiv))+
                            geom_count(aes(color=factor(drainage))) +
@@ -739,8 +818,8 @@ depletion_df<-data_frame(depletion_fixed_no_dup)
                           ggplot(data=cor_diversity_env_data,aes(shannondiv,simpsondiv))+
                             geom_point(aes(color=factor(elevation)))
                           
-                          ggplot(data=cor_diversity_env_data,aes(shannondiv,simpsondiv))+
-                            geom_count(aes(color=factor(elevation))) +
+                          ggplot(data=NEON_shannon_simppson,aes(shannon,simpson))+
+                            geom_count(aes(color=factor(ecoregion))) +
                             coord_fixed() +
                             theme_bw() +
                             scale_size_area(breaks = c(1,2))
